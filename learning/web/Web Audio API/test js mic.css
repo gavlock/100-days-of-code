@@ -5,3 +5,7 @@ canvas {
 #errorMessage {
     color: red;
 }
+
+#log {
+    border: thin solid grey;
+}

@@ -1,9 +1,31 @@
 var debugFFT;
 var debugCanvas;
 
-console.log("starting");
+console.log("starting with logging");
 
 $( () => {
+
+	// stuff added for verbose logging to debug problems on mobile browsers
+	const log = (() => {
+		const logContainer = $("#log");
+
+		return (...args) => {
+			const paragraph = $("<p>");
+			for (const arg of args) {
+				console.log(arg);
+				$("<span>").text(String(arg)).appendTo(paragraph);
+			}
+			paragraph.appendTo(logContainer);
+			
+			//console.log(message);
+			//$("<p>").text(String(message)).appendTo(logContainer);
+		};
+	})();
+
+	// end of verbose logging setup
+
+	log("Document ready");
+	
 	const piano88 = {
 		minFrequency: 27.5,
 		maxFrequency: 4186.01,
@@ -103,8 +125,11 @@ $( () => {
 	}
 
 	function onStart(userMediaStream) {
+		log("entering onStart");
 		const fft = setupFFT(userMediaStream);
+		log("onStart: fft = ", fft);
 		const canvas = new ViewCanvas();
+		log("onStart: canvas = ", canvas);
 
 		debugFFT = fft;
 		debugCanvas = canvas;
@@ -125,7 +150,7 @@ $( () => {
 	}
 	
 	$("#start").click( (event) => {
-		console.log("requesting audio");
+		log("requesting audio");
 		navigator.mediaDevices.getUserMedia( {audio: true} )
 			.then( (stream) => {
 				event.target.disabled = true;
@@ -135,10 +160,3 @@ $( () => {
 	});
 
 });
-
-
-
-
-
-
-
