@@ -1,0 +1,7 @@
+canvas {
+    border: thin solid grey;
+}
+
+#errorMessage {
+    color: red;
+}
