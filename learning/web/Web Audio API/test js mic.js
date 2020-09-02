@@ -3,7 +3,12 @@ var debugCanvas;
 
 console.log("starting with logging");
 
+window.onload = () => {
+	alert("window.onload");
+};
+
 $( () => {
+	alert("jquery doc ready");
 
 	// stuff added for verbose logging to debug problems on mobile browsers
 	const log = (() => {
