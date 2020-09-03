@@ -2,10 +2,10 @@ canvas {
     border: thin solid grey;
 }
 
-#errorMessage {
-    color: red;
-}
-
 #log {
     border: thin solid grey;
+}
+
+#log .error {
+    color: red;
 }

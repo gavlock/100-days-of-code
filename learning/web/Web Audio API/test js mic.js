@@ -1,30 +1,36 @@
-var debugFFT;
-var debugCanvas;
+function Debug() {
+	this.logContainer = null;
 
-console.log("starting with logging");
+	this.setLogContainer = (jquery) => {
+		this.logContainer = jquery.length ? jquery : null;
+	};
+
+	this._logImpl = (cssClass, consoleFunction, ...args) => {
+		const message = args.join(' ');
+
+		consoleFunction(message);
+
+		if (this.logContainer)
+			$('<p>').addClass(cssClass)
+			        .text(message)
+							.appendTo(this.logContainer);
+	};
+	
+	this.log = (...args) => debug._logImpl('info', console.info, ...args);
+
+	this.error = (...args) => debug._logImpl('error', console.error, ...args);
+
+	this.watch = {};
+}
+
+const debug = new Debug();
+
+debug.log('starting v8');
 
 $( () => {
-	// stuff added for verbose logging to debug problems on mobile browsers
-	const log = (() => {
-		const logContainer = $("#log");
-
-		return (...args) => {
-			const paragraph = $("<p>");
-			for (const arg of args) {
-				console.log(arg);
-				$("<span>").text(String(arg)).appendTo(paragraph);
-			}
-			paragraph.appendTo(logContainer);
-			
-			//console.log(message);
-			//$("<p>").text(String(message)).appendTo(logContainer);
-		};
-	})();
-
-	// end of verbose logging setup
-
-	log("Document ready 7");
-
+	debug.setLogContainer($('#log'));
+	debug.log('Document ready');
+	
 	const AudioContext = window.AudioContext || window.webkitAudioContext;
 	
 	const piano88 = {
@@ -37,10 +43,6 @@ $( () => {
 	function setupFFT(userMediaStream) {
 		const audioContext = new AudioContext( {sampleRate: piano88.maxFrequency * 2} );
 		
-		// create the audio nodes
-		//const micStream = new MediaStreamAudioSourceNode(audioContext, {mediaStream: userMediaStream});
-		//const analyser = new AnalyserNode(audioContext, {fftSize: 2048, smoothingTimeConstant: 0.1});
-
 		const micStream = audioContext.createMediaStreamSource(userMediaStream);
 		const analyser = audioContext.createAnalyser();
 		analyser.fftSize = 2048;
@@ -62,7 +64,7 @@ $( () => {
 
 	class ViewCanvas {
 		constructor () {
-			this.canvas = $("#view")[0];
+			this.canvas = $('#view')[0];
 			this.context = this.canvas.getContext('2d');
 
 			// horizontal axis ticks will be shown at these frequencies
@@ -91,7 +93,7 @@ $( () => {
 			const maxBarHeight = this.height - bottomPadding - topPadding;
 
 			// draw horizontal axis ticks
-			this.context.textAlign = "center";
+			this.context.textAlign = 'center';
 			const drawTick = (frequency) => {
 				const xPos = frequency / fft.nyquistFreq * this.width;
 				this.context.fillRect(xPos, this.height - bottomPadding, 1, 10);
@@ -105,9 +107,11 @@ $( () => {
 			// frequency spectrum bar chart
 
 			let maxAmplitude = 0;
+			let amplitudeSum = 0;
 			let fundamental = 0;
 			for (let i = 0 ; i < barCount ; ++i) {
 				const frequency = i * fft.binBandwith;
+				amplitudeSum += fft[i];
 				if (fft[i] > maxAmplitude) {
 					maxAmplitude = fft[i];
 					fundamental = frequency;
@@ -118,28 +122,32 @@ $( () => {
 				                      -(fft[i] / 256.0 * maxBarHeight));
 			}
 
+			const amplitudeMean = amplitudeSum / fft.length;
+			this.context.beginPath();
+			this.context.moveTo(0, this.height - bottomPadding - amplitudeMean / 256.0 * maxBarHeight);
+			this.context.lineTo(this.width, this.height - bottomPadding - amplitudeMean / 256.0 * maxBarHeight);
+			this.context.stroke();
+
 			if (fundamental) {
 				// display the fundamental frequency and closest note name
 				// at the top of the chart
 				const fundamentalXPos = fundamental / fft.nyquistFreq * this.width;
-				this.context.fillText(fundamental.toFixed(0) + " Hz", fundamentalXPos, 20);
+				this.context.fillText(fundamental.toFixed(0) + ' Hz', fundamentalXPos, 20);
 				
 				const keyIndex = Math.round((12 * Math.log(fundamental / piano88.minA) / Math.log(2)));
-				const keyNames = ["A", "A#", "B", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#"];
+				const keyNames = ['A', 'A#', 'B', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#'];
 				this.context.fillText(keyNames[keyIndex % 12], fundamentalXPos, 10);
 			}
 		}
 	}
 
 	function onStart(userMediaStream) {
-		log("entering onStart");
+		debug.log('Entering onStart');
 		const fft = setupFFT(userMediaStream);
-		log("onStart: fft = ", fft);
 		const canvas = new ViewCanvas();
-		log("onStart: canvas = ", canvas);
 
-		debugFFT = fft;
-		debugCanvas = canvas;
+		debug.watch.fft = fft;
+		debug.watch.canvas = canvas;
 
 		// animation loop to update FFT data and repaint the spectrum analyzer
 		const tick = () => {
@@ -151,23 +159,18 @@ $( () => {
 		window.requestAnimationFrame(tick);
 	}
 
-	function onError(error) {
-		$("#errorMessage").text("Error: " + error);
-		console.log(error);
-	}
-	
-	$("#start").click( (event) => {
-		if (typeof navigator.mediaDevices !== "undefined") {
-			log("requesting audio");
+	$('#start').click( (event) => {
+		if (typeof navigator.mediaDevices !== 'undefined') {
+			debug.log('Requesting audio');
 			navigator.mediaDevices.getUserMedia( {audio: true} )
 				.then( (stream) => {
 					event.target.disabled = true;
 					onStart(stream);
 				})
-				.catch(onError);
+				.catch(debug.error);
 		}
 		else
-			log("navigator.mediaDevices is undefined");
+			debug.log('navigator.mediaDevices is undefined');
 	});
 
 });
