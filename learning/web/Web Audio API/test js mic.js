@@ -3,13 +3,7 @@ var debugCanvas;
 
 console.log("starting with logging");
 
-window.onload = () => {
-	alert("window.onload");
-};
-
 $( () => {
-	alert("jquery doc ready");
-
 	// stuff added for verbose logging to debug problems on mobile browsers
 	const log = (() => {
 		const logContainer = $("#log");
@@ -63,22 +57,23 @@ $( () => {
 		constructor () {
 			this.canvas = $("#view")[0];
 			this.context = this.canvas.getContext('2d');
+
+			// horizontal axis ticks will be shown at these frequencies
+			this.freqTicks = [0,
+												piano88.minFrequency,
+												piano88.concertA,
+												piano88.concertA * 2,
+												piano88.concertA * 4,
+												piano88.maxFrequency,
+												24000
+											 ];
+		
 		}
 
 		get width() { return this.canvas.width; }
 		get height() { return this.canvas.height; }
 
-		// horizontal axis ticks will be shown at these frequencies
-		freqTicks = [0,
-		             piano88.minFrequency,
-		             piano88.concertA,
-		             piano88.concertA * 2,
-		             piano88.concertA * 4,
-		             piano88.maxFrequency,
-		             24000
-								];
-		
-		display = (fft) => {
+		display(fft) {
 			this.context.clearRect(0, 0, this.width, this.height);
 
 			const barCount = fft.length;
@@ -155,13 +150,17 @@ $( () => {
 	}
 	
 	$("#start").click( (event) => {
-		log("requesting audio");
-		navigator.mediaDevices.getUserMedia( {audio: true} )
-			.then( (stream) => {
-				event.target.disabled = true;
-				onStart(stream);
-			})
-			.catch(onError);
+		if (typeof navigator.mediaDevices !== "undefined") {
+			log("requesting audio");
+			navigator.mediaDevices.getUserMedia( {audio: true} )
+				.then( (stream) => {
+					event.target.disabled = true;
+					onStart(stream);
+				})
+				.catch(onError);
+		}
+		else
+			log("navigator.mediaDevices is undefined");
 	});
 
 });
