@@ -23,7 +23,9 @@ $( () => {
 
 	// end of verbose logging setup
 
-	log("Document ready");
+	log("Document ready 5");
+
+	const AudioContext = window.AudioContext || window.webkitAudioContext;
 	
 	const piano88 = {
 		minFrequency: 27.5,
