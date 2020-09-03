@@ -23,7 +23,7 @@ $( () => {
 
 	// end of verbose logging setup
 
-	log("Document ready 5");
+	log("Document ready 7");
 
 	const AudioContext = window.AudioContext || window.webkitAudioContext;
 	
@@ -38,8 +38,13 @@ $( () => {
 		const audioContext = new AudioContext( {sampleRate: piano88.maxFrequency * 2} );
 		
 		// create the audio nodes
-		const micStream = new MediaStreamAudioSourceNode(audioContext, {mediaStream: userMediaStream});
-		const analyser = new AnalyserNode(audioContext, {fftSize: 2048, smoothingTimeConstant: 0.1});
+		//const micStream = new MediaStreamAudioSourceNode(audioContext, {mediaStream: userMediaStream});
+		//const analyser = new AnalyserNode(audioContext, {fftSize: 2048, smoothingTimeConstant: 0.1});
+
+		const micStream = audioContext.createMediaStreamSource(userMediaStream);
+		const analyser = audioContext.createAnalyser();
+		analyser.fftSize = 2048;
+		analyser.smoothingTimeConstant = 0.1;
 
 		// build the graph
 		micStream.connect(analyser);
