@@ -62,6 +62,35 @@ $( () => {
 		return fft_data;
 	}
 
+	function analyse(fft) {
+		let maxAmplitude = 0;
+		let amplitudeAccum = 0;
+		let fundamental = 0;
+		
+		for (let i = 0 ; i < fft.length ; ++i) {
+			const frequency = i * fft.binBandwith;
+			amplitudeAccum += fft[i];
+			if (fft[i] > maxAmplitude) {
+				maxAmplitude = fft[i];
+				fundamental = frequency;
+			}
+		}
+		
+		const meanAmplitude = amplitudeAccum / fft.length;
+
+		let varianceAccum = 0;
+		for (let i = 0 ; i < fft.length ; ++i)
+			varianceAccum += Math.pow(fft[i] - meanAmplitude, 2);
+
+		const variance = varianceAccum / fft.length;
+		const standardDeviation = Math.sqrt(variance);
+		
+		return {fundamental: fundamental,
+		        meanAmplitude: meanAmplitude,
+		        standardDeviation: standardDeviation
+		       };
+	}
+	
 	class ViewCanvas {
 		constructor () {
 			this.canvas = $('#view')[0];
@@ -73,6 +102,7 @@ $( () => {
 												piano88.concertA,
 												piano88.concertA * 2,
 												piano88.concertA * 4,
+												piano88.concertA * 8,
 												piano88.maxFrequency,
 												24000
 											 ];
@@ -103,40 +133,69 @@ $( () => {
 			for (let freq of this.freqTicks)
 				drawTick(freq);
 
-			// find frequency with highest amplitude while drawing the
-			// frequency spectrum bar chart
+			// draw the frequency spectrum bar chart
 
-			let maxAmplitude = 0;
-			let amplitudeSum = 0;
-			let fundamental = 0;
 			for (let i = 0 ; i < barCount ; ++i) {
-				const frequency = i * fft.binBandwith;
-				amplitudeSum += fft[i];
-				if (fft[i] > maxAmplitude) {
-					maxAmplitude = fft[i];
-					fundamental = frequency;
-				}
 				this.context.fillRect(i * barWidth,
 				                      this.height - bottomPadding,
 				                      barWidth,
 				                      -(fft[i] / 256.0 * maxBarHeight));
 			}
 
-			const amplitudeMean = amplitudeSum / fft.length;
-			this.context.beginPath();
-			this.context.moveTo(0, this.height - bottomPadding - amplitudeMean / 256.0 * maxBarHeight);
-			this.context.lineTo(this.width, this.height - bottomPadding - amplitudeMean / 256.0 * maxBarHeight);
-			this.context.stroke();
+			const analysis = analyse(fft);
 
-			if (fundamental) {
+			const drawAmplitudeLine = (amplitude) => {
+				const y = this.height - bottomPadding - amplitude / 256.0 * maxBarHeight;
+				this.context.beginPath();
+				this.context.moveTo(0, y);
+				this.context.lineTo(this.width, y);
+				this.context.stroke();
+			};
+
+			const cutoffStandardDeviations = 5;
+
+			for (let i = 0 ; i <= cutoffStandardDeviations ; ++i)
+				drawAmplitudeLine(analysis.meanAmplitude + (i * analysis.standardDeviation));
+
+			const cutoff = Math.min(200, analysis.meanAmplitude + (cutoffStandardDeviations * analysis.standardDeviation));
+
+			this.context.fillStyle = this.context.strokeStyle = 'red';
+			drawAmplitudeLine(cutoff);
+			for (let i = 0 ; i < barCount ; ++i) {
+				if (fft[i] > cutoff)
+					this.context.fillRect(i * barWidth,
+																this.height - bottomPadding,
+																barWidth,
+																-(fft[i] / 256.0 * maxBarHeight));
+			}
+			this.context.fillStyle = this.context.strokeStyle = 'black';
+
+			// recalculate fundamental using cutoff
+			let newFundamental = 0;
+			let maxAmplitude = 0;
+			
+			for (let i = 0 ; i < fft.length ; ++i) {
+				if (fft[i] > cutoff) {
+					if (fft[i] > maxAmplitude) {
+						newFundamental = i * fft.binBandwith;
+						maxAmplitude = fft[i];
+					}
+					else
+						break;
+				}
+			}
+			analysis.fundamental = newFundamental;
+
+			if (analysis.fundamental) {
 				// display the fundamental frequency and closest note name
 				// at the top of the chart
-				const fundamentalXPos = fundamental / fft.nyquistFreq * this.width;
-				this.context.fillText(fundamental.toFixed(0) + ' Hz', fundamentalXPos, 20);
+				const fundamentalXPos = analysis.fundamental / fft.nyquistFreq * this.width;
+				this.context.fillText(analysis.fundamental.toFixed(0) + ' Hz', fundamentalXPos, 20);
 				
-				const keyIndex = Math.round((12 * Math.log(fundamental / piano88.minA) / Math.log(2)));
+				const keyIndex = Math.round((12 * Math.log(analysis.fundamental / piano88.minA) / Math.log(2)));
 				const keyNames = ['A', 'A#', 'B', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#'];
-				this.context.fillText(keyNames[keyIndex % 12], fundamentalXPos, 10);
+				const octave = Math.floor((keyIndex + 9) / 12);
+				this.context.fillText(keyNames[keyIndex % 12] + octave, fundamentalXPos, 10);
 			}
 		}
 	}
