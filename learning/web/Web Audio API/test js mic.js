@@ -41,7 +41,7 @@ $( () => {
 	};
 	
 	function setupFFT(userMediaStream) {
-		const audioContext = new AudioContext( {sampleRate: piano88.maxFrequency * 2} );
+		const audioContext = new AudioContext( {sampleRate: 48000} );
 		
 		const micStream = audioContext.createMediaStreamSource(userMediaStream);
 		const analyser = audioContext.createAnalyser();
@@ -115,17 +115,18 @@ $( () => {
 		display(fft) {
 			this.context.clearRect(0, 0, this.width, this.height);
 
-			const barCount = fft.length;
+			const maxFrequency = piano88.maxFrequency;
+			const barCount = maxFrequency / fft.binBandwith;
 			const barWidth = this.width / barCount;
 
-			const topPadding = 10;
+			const topPadding = 50;
 			const bottomPadding = 50;
 			const maxBarHeight = this.height - bottomPadding - topPadding;
 
 			// draw horizontal axis ticks
 			this.context.textAlign = 'center';
 			const drawTick = (frequency) => {
-				const xPos = frequency / fft.nyquistFreq * this.width;
+				const xPos = frequency / maxFrequency * this.width;
 				this.context.fillRect(xPos, this.height - bottomPadding, 1, 10);
 				this.context.fillText(frequency, xPos, this.height - (bottomPadding / 2));
 			};
@@ -161,6 +162,9 @@ $( () => {
 
 			this.context.fillStyle = this.context.strokeStyle = 'red';
 			drawAmplitudeLine(cutoff);
+
+			// draw the *filtered* frequency spectrum bar chart
+			
 			for (let i = 0 ; i < barCount ; ++i) {
 				if (fft[i] > cutoff)
 					this.context.fillRect(i * barWidth,
@@ -189,7 +193,7 @@ $( () => {
 			if (analysis.fundamental) {
 				// display the fundamental frequency and closest note name
 				// at the top of the chart
-				const fundamentalXPos = analysis.fundamental / fft.nyquistFreq * this.width;
+				const fundamentalXPos = analysis.fundamental / maxFrequency * this.width;
 				this.context.fillText(analysis.fundamental.toFixed(0) + ' Hz', fundamentalXPos, 20);
 				
 				const keyIndex = Math.round((12 * Math.log(analysis.fundamental / piano88.minA) / Math.log(2)));
@@ -197,6 +201,32 @@ $( () => {
 				const octave = Math.floor((keyIndex + 9) / 12);
 				this.context.fillText(keyNames[keyIndex % 12] + octave, fundamentalXPos, 10);
 			}
+
+			// draw the *harmonic product* frequency spectrum bar chart
+
+			this.context.fillStyle = this.context.strokeStyle = 'green';
+			const harmonicProductRange = Math.floor((fft.nyquistFreq / piano88.maxFrequency) / 2);
+			const harmonicProductCount = Math.floor(fft.length / harmonicProductRange);
+			const harmonicProducts = new Array(harmonicProductCount);
+
+			for (let i = 0 ; i < harmonicProductCount ; ++i) {
+				let product = 1;
+				for (let h = 1 ; h <= harmonicProductRange ; ++h)
+					product *= (fft[h * i] / 256.0);
+				harmonicProducts[i] = product;
+			}
+
+			const maxProduct = Math.max(...harmonicProducts);
+			const harmonicBarCount = Math.min(barCount, harmonicProductCount);
+			
+			for (let i = 0 ; i < harmonicBarCount ; ++i) {
+				this.context.fillRect(i * barWidth,
+															this.height - bottomPadding,
+															barWidth,
+															-(harmonicProducts[i] / maxProduct * maxBarHeight));
+			}
+			this.context.fillStyle = this.context.strokeStyle = 'black';
+
 		}
 	}
 
