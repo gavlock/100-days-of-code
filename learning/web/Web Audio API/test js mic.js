@@ -32,6 +32,57 @@ $( () => {
 	debug.log('Document ready');
 	
 	const AudioContext = window.AudioContext || window.webkitAudioContext;
+
+	class Instrument {
+		// In this context, "key" has the same meaning as "key" in "an 88-key piano"
+		// and _not_ as in "the key of C major"
+		
+		// to fit in with the music world, key numbers are 1-based (not zero-based)
+
+		constructor(keyCount, referenceKeyNumber, referenceNote, referenceFrequency) {
+			referenceNote = referenceNote.toUpperCase();
+			if (referenceNote[1] == 'b')
+				referenceNote[1] = '♭';
+			
+			this.keyCount = keyCount;
+			this.referenceKeyNumber  = referenceKeyNumber;
+			
+			if (referenceNote[1] == '#' || referenceNote[1] == '♭') {
+				this.referenceNoteName   = referenceNote.slice(0, 1);
+				this.referenceNoteOctave = parseInt(referenceNote.slice(2));
+			} else {
+				this.referenceNoteName   = referenceNote[0];
+				this.referenceNoteOctave = parseInt(referenceNote.slice(1));
+			}
+			
+			this.referenceFrequency  = referenceFrequency;
+
+			this.noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+			this.referenceNoteIndex = this.noteNames.indexOf(this.referenceNoteName);
+			this.c0KeyNumber = referenceKeyNumber - this.referenceNoteIndex - (12 * this.referenceNoteOctave);
+
+			this.keys = new Array(keyCount);
+			for (let keyNumber = 1 ; keyNumber <= keyCount ; ++keyNumber)
+				this.keys[keyNumber - 1] = {number: keyNumber,
+				                            note:   this.keyNote(keyNumber),
+				                            frequency: this.keyFrequency(keyNumber)
+				                           };
+		}
+
+		keyFrequency(keyNumber) {
+			return this.referenceFrequency * Math.pow(2, (keyNumber - this.referenceKeyNumber) / 12.0);
+		}
+
+		keyNote(keyNumber) {
+			const noteIndex = (((keyNumber - this.referenceKeyNumber + this.referenceNoteIndex) % 12) + 12) % 12;
+			const octave = Math.floor((keyNumber - this.c0KeyNumber) / 12);
+			return this.noteNames[noteIndex] + octave;
+		}
+
+	}
+
+	const piano = new Instrument(88, 49, 'A4', 440);
+	debug.watch.piano = piano;
 	
 	const piano88 = {
 		minFrequency: 27.5,
@@ -131,9 +182,12 @@ $( () => {
 				this.context.fillText(frequency, xPos, this.height - (bottomPadding / 2));
 			};
 
-			for (let freq of this.freqTicks)
-				drawTick(freq);
+			//for (let freq of this.freqTicks)
+			//	drawTick(freq);
 
+			for (let key of piano.keys)
+				drawTick(key.frequency);
+			
 			// draw the frequency spectrum bar chart
 
 			for (let i = 0 ; i < barCount ; ++i) {
