@@ -39,7 +39,9 @@ $( () => {
 		
 		// to fit in with the music world, key numbers are 1-based (not zero-based)
 
-		constructor(keyCount, referenceKeyNumber, referenceNote, referenceFrequency) {
+		constructor(name, keyCount, referenceKeyNumber, referenceNote, referenceFrequency) {
+			this.name = name;
+			
 			referenceNote = referenceNote.toUpperCase();
 			if (referenceNote[1] == 'b')
 				referenceNote[1] = '♭';
@@ -59,37 +61,62 @@ $( () => {
 
 			this.noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 			this.referenceNoteIndex = this.noteNames.indexOf(this.referenceNoteName);
-			this.c0KeyNumber = referenceKeyNumber - this.referenceNoteIndex - (12 * this.referenceNoteOctave);
+			this._c0KeyNumber = referenceKeyNumber - this.referenceNoteIndex - (12 * this.referenceNoteOctave);
 
 			this.keys = new Array(keyCount);
 			for (let keyNumber = 1 ; keyNumber <= keyCount ; ++keyNumber)
 				this.keys[keyNumber - 1] = {number: keyNumber,
-				                            note:   this.keyNote(keyNumber),
-				                            frequency: this.keyFrequency(keyNumber)
+				                            note:   this._keyNote(keyNumber),
+				                            frequency: this._keyFrequency(keyNumber)
 				                           };
+
+			this.keys.first = this.keys[0];
+			this.keys.last = this.keys[this.keys.length - 1];
 		}
 
-		keyFrequency(keyNumber) {
+		_keyFrequency(keyNumber) {
 			return this.referenceFrequency * Math.pow(2, (keyNumber - this.referenceKeyNumber) / 12.0);
 		}
 
-		keyNote(keyNumber) {
+		_keyNote(keyNumber) {
 			const noteIndex = (((keyNumber - this.referenceKeyNumber + this.referenceNoteIndex) % 12) + 12) % 12;
-			const octave = Math.floor((keyNumber - this.c0KeyNumber) / 12);
+			const octave = Math.floor((keyNumber - this._c0KeyNumber) / 12);
 			return this.noteNames[noteIndex] + octave;
 		}
 
+		_keyNumberFromFrequency(frequency) {
+			const relativeIndex = Math.round((12 * Math.log(frequency / this.referenceFrequency) / Math.log(2)));
+			return this.referenceKeyNumber + relativeIndex;
+		}
+
+		_keyIndexFromNumber(keyNumber)  {
+			return keyNumber - 1;
+		}
+
+		keyFromNumber(keyNumber) {
+			if (1 <= keyNumber && keyNumber <= this.keyCount)
+				return this.keys[this._keyIndexFromNumber(keyNumber)];
+			else
+				return undefined;
+		}
+
+		keyFromFrequency(frequency) {
+			return this.keyFromNumber(this._keyNumberFromFrequency(frequency));
+		}
+
+		keysFromNoteName(noteName) {
+			noteName = noteName.toUpperCase();
+			if (noteName.length == 1)
+				return this.keys.filter( (key) => key.note[0] == noteName
+				                                    && key.note[1] != '#'
+																						&& key.note[1] != '♭' );
+			else
+				return this.keys.filter( (key) => key.note.slice(0, 2) == noteName );
+		}
 	}
 
-	const piano = new Instrument(88, 49, 'A4', 440);
-	debug.watch.piano = piano;
-	
-	const piano88 = {
-		minFrequency: 27.5,
-		maxFrequency: 4186.01,
-		minA: 27.5,
-		concertA: 440
-	};
+	const instrument = new Instrument('88-key piano', 88, 49, 'A4', 440);
+	debug.watch.instrument = instrument;
 	
 	function setupFFT(userMediaStream) {
 		const audioContext = new AudioContext( {sampleRate: 48000} );
@@ -141,23 +168,11 @@ $( () => {
 		        standardDeviation: standardDeviation
 		       };
 	}
-	
+
 	class ViewCanvas {
 		constructor () {
 			this.canvas = $('#view')[0];
 			this.context = this.canvas.getContext('2d');
-
-			// horizontal axis ticks will be shown at these frequencies
-			this.freqTicks = [0,
-												piano88.minFrequency,
-												piano88.concertA,
-												piano88.concertA * 2,
-												piano88.concertA * 4,
-												piano88.concertA * 8,
-												piano88.maxFrequency,
-												24000
-											 ];
-		
 		}
 
 		get width() { return this.canvas.width; }
@@ -166,7 +181,7 @@ $( () => {
 		display(fft) {
 			this.context.clearRect(0, 0, this.width, this.height);
 
-			const maxFrequency = piano88.maxFrequency;
+			const maxFrequency = instrument.keys.last.frequency;
 			const barCount = maxFrequency / fft.binBandwith;
 			const barWidth = this.width / barCount;
 
@@ -176,17 +191,18 @@ $( () => {
 
 			// draw horizontal axis ticks
 			this.context.textAlign = 'center';
-			const drawTick = (frequency) => {
+			const drawTick = (frequency, label) => {
 				const xPos = frequency / maxFrequency * this.width;
 				this.context.fillRect(xPos, this.height - bottomPadding, 1, 10);
-				this.context.fillText(frequency, xPos, this.height - (bottomPadding / 2));
+				if (label)
+					this.context.fillText(label, xPos, this.height - (bottomPadding / 2));
 			};
 
-			//for (let freq of this.freqTicks)
-			//	drawTick(freq);
-
-			for (let key of piano.keys)
+			for (let key of instrument.keys)
 				drawTick(key.frequency);
+			
+			for (let key of instrument.keysFromNoteName('A'))
+				drawTick(key.frequency, key.note);
 			
 			// draw the frequency spectrum bar chart
 
@@ -249,17 +265,15 @@ $( () => {
 				// at the top of the chart
 				const fundamentalXPos = analysis.fundamental / maxFrequency * this.width;
 				this.context.fillText(analysis.fundamental.toFixed(0) + ' Hz', fundamentalXPos, 20);
-				
-				const keyIndex = Math.round((12 * Math.log(analysis.fundamental / piano88.minA) / Math.log(2)));
-				const keyNames = ['A', 'A#', 'B', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#'];
-				const octave = Math.floor((keyIndex + 9) / 12);
-				this.context.fillText(keyNames[keyIndex % 12] + octave, fundamentalXPos, 10);
+				const key = instrument.keyFromFrequency(analysis.fundamental);
+				if (key)
+					this.context.fillText(key.note, fundamentalXPos, 10);
 			}
 
 			// draw the *harmonic product* frequency spectrum bar chart
 
 			this.context.fillStyle = this.context.strokeStyle = 'green';
-			const harmonicProductRange = Math.floor((fft.nyquistFreq / piano88.maxFrequency) / 2);
+			const harmonicProductRange = Math.floor((fft.nyquistFreq / instrument.keys.last.frequency) / 2);
 			const harmonicProductCount = Math.floor(fft.length / harmonicProductRange);
 			const harmonicProducts = new Array(harmonicProductCount);
 
