@@ -1,5 +1,5 @@
 import {Debug} from './modules/debug.mjs';
-const debug = new Debug();
+const debug = window.dbg = new Debug();
 debug.log('starting');
 
 import {Instrument} from './modules/instrument.mjs';
@@ -76,9 +76,17 @@ $( () => {
 		display(fft) {
 			this.context.clearRect(0, 0, this.width, this.height);
 
-			const maxFrequency = instrument.keys.last.frequency;
+			// scale view to include 1/2 an octave on either side of the instrument range
+			const minFrequency = instrument.keys.first.frequency / 1.5;
+			const maxFrequency = instrument.keys.last.frequency * 1.5;
+			const frequencyRange = maxFrequency - minFrequency;
+			
 			const barCount = maxFrequency / fft.binBandwith;
-			const barWidth = this.width / barCount;
+			const barWidth = 3; //this.width / barCount;
+
+			const frequencyToXLinear = (frequency) => (frequency - minFrequency) / frequencyRange * this.width;
+			const frequencyToXLogarithmic = (frequency) => Math.log(frequency - minFrequency) / Math.log(frequencyRange) * this.width;
+			const frequencyToX = frequencyToXLogarithmic;
 
 			const topPadding = 50;
 			const bottomPadding = 50;
@@ -87,7 +95,7 @@ $( () => {
 			// draw horizontal axis ticks
 			this.context.textAlign = 'center';
 			const drawTick = (frequency, label) => {
-				const xPos = frequency / maxFrequency * this.width;
+				const xPos = frequencyToX(frequency);
 				this.context.fillRect(xPos, this.height - bottomPadding, 1, 10);
 				if (label)
 					this.context.fillText(label, xPos, this.height - (bottomPadding / 2));
@@ -102,7 +110,7 @@ $( () => {
 			// draw the frequency spectrum bar chart
 
 			for (let i = 0 ; i < barCount ; ++i) {
-				this.context.fillRect(i * barWidth,
+				this.context.fillRect(frequencyToX(i * fft.binBandwith),
 				                      this.height - bottomPadding,
 				                      barWidth,
 				                      -(fft[i] / 256.0 * maxBarHeight));
@@ -132,7 +140,7 @@ $( () => {
 			
 			for (let i = 0 ; i < barCount ; ++i) {
 				if (fft[i] > cutoff)
-					this.context.fillRect(i * barWidth,
+					this.context.fillRect(frequencyToX(i * fft.binBandwith),
 																this.height - bottomPadding,
 																barWidth,
 																-(fft[i] / 256.0 * maxBarHeight));
@@ -158,7 +166,7 @@ $( () => {
 			if (analysis.fundamental) {
 				// display the fundamental frequency and closest note name
 				// at the top of the chart
-				const fundamentalXPos = analysis.fundamental / maxFrequency * this.width;
+				const fundamentalXPos = frequencyToX(analysis.fundamental);
 				this.context.fillText(analysis.fundamental.toFixed(0) + ' Hz', fundamentalXPos, 20);
 				const key = instrument.keyFromFrequency(analysis.fundamental);
 				if (key)
@@ -183,7 +191,7 @@ $( () => {
 			const harmonicBarCount = Math.min(barCount, harmonicProductCount);
 			
 			for (let i = 0 ; i < harmonicBarCount ; ++i) {
-				this.context.fillRect(i * barWidth,
+				this.context.fillRect(frequencyToX(i * fft.binBandwith),
 															this.height - bottomPadding,
 															barWidth,
 															-(harmonicProducts[i] / maxProduct * maxBarHeight));
