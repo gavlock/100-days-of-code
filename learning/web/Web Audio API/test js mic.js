@@ -12,29 +12,33 @@ $( () => {
 
 	const instrument = new Instrument('88-key piano', 88, 49, 'A4', 440);
 	debug.watch.instrument = instrument;
-	
-	function setupFFT(userMediaStream) {
-		const audioContext = new AudioContext( {sampleRate: 48000} );
+
+	class AudioData {
+		constructor(userMediaStream) {
+			const audioContext = new AudioContext( {sampleRate: 48000} );
 		
-		const micStream = audioContext.createMediaStreamSource(userMediaStream);
-		const analyser = audioContext.createAnalyser();
-		analyser.fftSize = 8192;
-		analyser.smoothingTimeConstant = 0.9;
+			const micStream = audioContext.createMediaStreamSource(userMediaStream);
+			const analyser = audioContext.createAnalyser();
+			analyser.fftSize = 8192;
+			analyser.smoothingTimeConstant = 0.9;
 
-		// build the graph
-		micStream.connect(analyser);
+			// build the graph
+			micStream.connect(analyser);
 
-		// setup the FFT data array and some other utility members
-		let fft_data = new Uint8Array(analyser.frequencyBinCount);
-		
-		fft_data.update = () => { analyser.getByteFrequencyData(fft_data); };
-		fft_data.sampleRate = audioContext.sampleRate;
-		fft_data.nyquistFreq = fft_data.sampleRate / 2;
-		fft_data.binBandwith = fft_data.nyquistFreq / analyser.frequencyBinCount;
+			this.sampleRate = audioContext.sampleRate;
+			this.nyquistFreq = this.sampleRate / 2;
+			this.binBandwith = this.nyquistFreq / analyser.frequencyBinCount;
 
-		return fft_data;
+			this.fftData = new Uint8Array(analyser.frequencyBinCount);
+			this.timeDomainData = new Uint8Array(analyser.fftSize);
+
+			this.update = () => {
+				analyser.getByteFrequencyData(this.fftData);
+				analyser.getByteTimeDomainData(this.timeDomainData);
+			};
+		}
 	}
-
+	
 	function analyse(fft) {
 		let maxAmplitude = 0;
 		let amplitudeAccum = 0;
@@ -73,7 +77,7 @@ $( () => {
 		get width() { return this.canvas.width; }
 		get height() { return this.canvas.height; }
 
-		display(fft) {
+		display(audioData) {
 			this.context.clearRect(0, 0, this.width, this.height);
 
 			// scale view to include 1/2 an octave on either side of the instrument range
@@ -81,7 +85,7 @@ $( () => {
 			const maxFrequency = instrument.keys.last.frequency * 1.5;
 			const frequencyRange = maxFrequency - minFrequency;
 			
-			const barCount = maxFrequency / fft.binBandwith;
+			const barCount = maxFrequency / audioData.binBandwith;
 			const barWidth = 3; //this.width / barCount;
 
 			const frequencyToXLinear = (frequency) => (frequency - minFrequency) / frequencyRange * this.width;
@@ -106,11 +110,14 @@ $( () => {
 			
 			for (let key of instrument.keysFromNoteName('A'))
 				drawTick(key.frequency, key.note);
-			
+
+			// FFT-based test
+
 			// draw the frequency spectrum bar chart
+			let fft = audioData.fftData;
 
 			for (let i = 0 ; i < barCount ; ++i) {
-				this.context.fillRect(frequencyToX(i * fft.binBandwith),
+				this.context.fillRect(frequencyToX(i * audioData.binBandwith),
 				                      this.height - bottomPadding,
 				                      barWidth,
 				                      -(fft[i] / 256.0 * maxBarHeight));
@@ -140,7 +147,7 @@ $( () => {
 			
 			for (let i = 0 ; i < barCount ; ++i) {
 				if (fft[i] > cutoff)
-					this.context.fillRect(frequencyToX(i * fft.binBandwith),
+					this.context.fillRect(frequencyToX(i * audioData.binBandwith),
 																this.height - bottomPadding,
 																barWidth,
 																-(fft[i] / 256.0 * maxBarHeight));
@@ -154,7 +161,7 @@ $( () => {
 			for (let i = 0 ; i < fft.length ; ++i) {
 				if (fft[i] > cutoff) {
 					if (fft[i] > maxAmplitude) {
-						newFundamental = i * fft.binBandwith;
+						newFundamental = i * audioData.binBandwith;
 						maxAmplitude = fft[i];
 					}
 					else
@@ -176,7 +183,7 @@ $( () => {
 			// draw the *harmonic product* frequency spectrum bar chart
 
 			this.context.fillStyle = this.context.strokeStyle = 'green';
-			const harmonicProductRange = Math.floor((fft.nyquistFreq / instrument.keys.last.frequency) / 2);
+			const harmonicProductRange = Math.floor((audioData.nyquistFreq / instrument.keys.last.frequency) / 2);
 			const harmonicProductCount = Math.floor(fft.length / harmonicProductRange);
 			const harmonicProducts = new Array(harmonicProductCount);
 
@@ -191,28 +198,75 @@ $( () => {
 			const harmonicBarCount = Math.min(barCount, harmonicProductCount);
 			
 			for (let i = 0 ; i < harmonicBarCount ; ++i) {
-				this.context.fillRect(frequencyToX(i * fft.binBandwith),
+				this.context.fillRect(frequencyToX(i * audioData.binBandwith),
 															this.height - bottomPadding,
 															barWidth,
 															-(harmonicProducts[i] / maxProduct * maxBarHeight));
 			}
 			this.context.fillStyle = this.context.strokeStyle = 'black';
 
+			// Auto-correlation-based test
+			const tdData = audioData.timeDomainData;
+			const acValues = new Array(instrument.keys.length);
+			
+			const samplePeriod = 1 / audioData.sampleRate;
+			
+			for (let k = 0; k < instrument.keys.length ; ++k) {
+				const frequency = instrument.keys[k].frequency;
+				const stride = audioData.sampleRate / frequency;
+				const strideCount = Math.floor(tdData.length / stride);
+
+				let amplitudeSum = 0;
+				let amplitudeCount = 0;
+
+				for (let j = 0 ; j < tdData.length - stride - 1 ; ++ j) {
+					amplitudeSum += (tdData[j] / 256.0) * (tdData[Math.floor(j+stride)] / 256.0);
+					++amplitudeCount;
+				}
+
+				/*
+				for (let strideBase = 0 ; strideBase < strideCount ; ++strideBase) {
+					let strideProduct = 1;
+					for (let i = strideBase ; i < tdData.length ; ++i)
+						strideProduct *= (tdData[i] / 256.0);
+					amplitudeSum += strideProduct;
+					++amplitudeCount;
+				}
+				*/
+				acValues[k] = [frequency, amplitudeSum / amplitudeCount];
+			}
+
+			let min = 1;
+			let max = 0;
+			for (const [frequency, amplitude] of acValues) {
+				min = Math.min(min, amplitude);
+				max = Math.max(max, amplitude);
+			}
+
+			this.context.fillStyle = this.context.strokeStyle = 'blue';
+			for (const [frequency, amplitude] of acValues) {
+				this.context.fillRect(frequencyToX(frequency),
+				                      this.height - bottomPadding,
+				                      barWidth,
+				                      -((amplitude - min) / (max - min) * maxBarHeight));
+			}
+			this.context.fillStyle = this.context.strokeStyle = 'black';
+			
 		}
 	}
 
 	function onStart(userMediaStream) {
 		debug.log('Entering onStart');
-		const fft = setupFFT(userMediaStream);
+		const audioData = new AudioData(userMediaStream);
 		const canvas = new ViewCanvas();
 
-		debug.watch.fft = fft;
+		debug.watch.audioData = audioData;
 		debug.watch.canvas = canvas;
 
-		// animation loop to update FFT data and repaint the spectrum analyzer
+		// animation loop to update audio data and repaint the spectrum analyzer
 		const tick = () => {
-			fft.update();
-			canvas.display(fft);
+			audioData.update();
+			canvas.display(audioData);
 			window.requestAnimationFrame(tick);
 		};
 
