@@ -18,8 +18,8 @@ $( () => {
 		
 		const micStream = audioContext.createMediaStreamSource(userMediaStream);
 		const analyser = audioContext.createAnalyser();
-		analyser.fftSize = 2048;
-		analyser.smoothingTimeConstant = 0.1;
+		analyser.fftSize = 8192;
+		analyser.smoothingTimeConstant = 0.9;
 
 		// build the graph
 		micStream.connect(analyser);
@@ -96,7 +96,7 @@ $( () => {
 			this.context.textAlign = 'center';
 			const drawTick = (frequency, label) => {
 				const xPos = frequencyToX(frequency);
-				this.context.fillRect(xPos, this.height - bottomPadding, 1, 10);
+				this.context.fillRect(xPos, this.height - bottomPadding, 1, label ? -(this.height - bottomPadding - topPadding) : 10);
 				if (label)
 					this.context.fillText(label, xPos, this.height - (bottomPadding / 2));
 			};
