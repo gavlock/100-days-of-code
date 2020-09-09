@@ -207,6 +207,27 @@ $( () => {
 
 			// Auto-correlation-based test
 			const tdData = audioData.timeDomainData;
+
+			const minLag = Math.floor(audioData.sampleRate / instrument.keys.last.frequency);
+			const maxLag = Math.ceil(audioData.sampleRate / instrument.keys.first.frequency);
+			const acValues = new Array(maxLag - minLag + 1);
+			
+			//const windowPeriods = Math.floor(tdData.length / maxLag);
+			const windowSeconds = 0.1;
+			const window = Math.min(windowSeconds * audioData.sampleRate, tdData.length);
+
+			for (let lag = minLag ; lag <= maxLag ; ++lag) {
+				const frequency = audioData.sampleRate / lag;
+				let accum = 0;
+				let count = 0;
+				for (let j = 0 ; j < window - 1; ++j) {
+					accum += (tdData[j] / 256.0) * (tdData[j+lag] / 256.0);
+					++count;
+				}
+				acValues[lag - minLag] = [frequency, count ? accum / count : 0];
+			}
+
+			/*
 			const acValues = new Array(instrument.keys.length);
 			
 			const samplePeriod = 1 / audioData.sampleRate;
@@ -223,6 +244,7 @@ $( () => {
 					amplitudeSum += (tdData[j] / 256.0) * (tdData[Math.floor(j+stride)] / 256.0);
 					++amplitudeCount;
 				}
+				*/
 
 				/*
 				for (let strideBase = 0 ; strideBase < strideCount ; ++strideBase) {
@@ -232,9 +254,9 @@ $( () => {
 					amplitudeSum += strideProduct;
 					++amplitudeCount;
 				}
-				*/
 				acValues[k] = [frequency, amplitudeSum / amplitudeCount];
 			}
+			*/
 
 			let min = 1;
 			let max = 0;
