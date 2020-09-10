@@ -24,6 +24,7 @@ $( () => {
 
 			// build the graph
 			micStream.connect(analyser);
+			//analyser.connect(audioContext.destination);
 
 			this.sampleRate = audioContext.sampleRate;
 			this.nyquistFreq = this.sampleRate / 2;
@@ -101,8 +102,10 @@ $( () => {
 			const drawTick = (frequency, label) => {
 				const xPos = frequencyToX(frequency);
 				this.context.fillRect(xPos, this.height - bottomPadding, 1, label ? -(this.height - bottomPadding - topPadding) : 10);
-				if (label)
+				if (label) {
 					this.context.fillText(label, xPos, this.height - (bottomPadding / 2));
+					this.context.fillText(frequency, xPos, this.height - (bottomPadding / 4));
+				}
 			};
 
 			for (let key of instrument.keys)
@@ -111,6 +114,53 @@ $( () => {
 			for (let key of instrument.keysFromNoteName('A'))
 				drawTick(key.frequency, key.note);
 
+			// Auto-correlation-based test
+			const tdData = audioData.timeDomainData;
+
+			const minLag = Math.floor(audioData.sampleRate / instrument.keys.last.frequency);
+			const maxLag = Math.ceil(audioData.sampleRate / (instrument.keys.first.frequency * 2 / 3));
+			const windowSeconds = 0.1;
+
+			const autocorrelate = (data, minLag, maxLag, windowSeconds) => {
+				const acValues = new Array(maxLag - minLag + 1);
+
+				const window = Math.min(windowSeconds * audioData.sampleRate, data.length);
+
+				for (let lag = minLag ; lag <= maxLag ; ++lag) {
+					const frequency = audioData.sampleRate / lag;
+					let accum = 0;
+					let count = 0;
+					for (let j = 0 ; j < window - 1; ++j) {
+						accum += (data[j] / 256.0) * (data[j+lag] / 256.0);
+						++count;
+					}
+					acValues[lag - minLag] = [frequency, count ? accum / count : 0];
+				}
+				
+				return acValues;
+			};
+
+			let acValues = autocorrelate(tdData, minLag, maxLag, windowSeconds);
+			//acValues = autocorrelate(acValues, minLag, maxLag, windowSeconds);
+			
+			let min = 1;
+			let max = 0;
+			for (const [frequency, amplitude] of acValues) {
+				min = Math.min(min, amplitude);
+				max = Math.max(max, amplitude);
+			}
+			min = Math.max(0.95 * max, min);
+
+			this.context.fillStyle = this.context.strokeStyle = 'blue';
+			for (const [frequency, amplitude] of acValues) {
+				if (amplitude > min)
+					this.context.fillRect(frequencyToX(frequency),
+																this.height - bottomPadding,
+																barWidth,
+																-((amplitude - min) / (max - min) * maxBarHeight));
+			}
+			this.context.fillStyle = this.context.strokeStyle = 'black';
+			
 			// FFT-based test
 
 			// draw the frequency spectrum bar chart
@@ -205,75 +255,6 @@ $( () => {
 			}
 			this.context.fillStyle = this.context.strokeStyle = 'black';
 
-			// Auto-correlation-based test
-			const tdData = audioData.timeDomainData;
-
-			const minLag = Math.floor(audioData.sampleRate / instrument.keys.last.frequency);
-			const maxLag = Math.ceil(audioData.sampleRate / instrument.keys.first.frequency);
-			const acValues = new Array(maxLag - minLag + 1);
-			
-			//const windowPeriods = Math.floor(tdData.length / maxLag);
-			const windowSeconds = 0.1;
-			const window = Math.min(windowSeconds * audioData.sampleRate, tdData.length);
-
-			for (let lag = minLag ; lag <= maxLag ; ++lag) {
-				const frequency = audioData.sampleRate / lag;
-				let accum = 0;
-				let count = 0;
-				for (let j = 0 ; j < window - 1; ++j) {
-					accum += (tdData[j] / 256.0) * (tdData[j+lag] / 256.0);
-					++count;
-				}
-				acValues[lag - minLag] = [frequency, count ? accum / count : 0];
-			}
-
-			/*
-			const acValues = new Array(instrument.keys.length);
-			
-			const samplePeriod = 1 / audioData.sampleRate;
-			
-			for (let k = 0; k < instrument.keys.length ; ++k) {
-				const frequency = instrument.keys[k].frequency;
-				const stride = audioData.sampleRate / frequency;
-				const strideCount = Math.floor(tdData.length / stride);
-
-				let amplitudeSum = 0;
-				let amplitudeCount = 0;
-
-				for (let j = 0 ; j < tdData.length - stride - 1 ; ++ j) {
-					amplitudeSum += (tdData[j] / 256.0) * (tdData[Math.floor(j+stride)] / 256.0);
-					++amplitudeCount;
-				}
-				*/
-
-				/*
-				for (let strideBase = 0 ; strideBase < strideCount ; ++strideBase) {
-					let strideProduct = 1;
-					for (let i = strideBase ; i < tdData.length ; ++i)
-						strideProduct *= (tdData[i] / 256.0);
-					amplitudeSum += strideProduct;
-					++amplitudeCount;
-				}
-				acValues[k] = [frequency, amplitudeSum / amplitudeCount];
-			}
-			*/
-
-			let min = 1;
-			let max = 0;
-			for (const [frequency, amplitude] of acValues) {
-				min = Math.min(min, amplitude);
-				max = Math.max(max, amplitude);
-			}
-
-			this.context.fillStyle = this.context.strokeStyle = 'blue';
-			for (const [frequency, amplitude] of acValues) {
-				this.context.fillRect(frequencyToX(frequency),
-				                      this.height - bottomPadding,
-				                      barWidth,
-				                      -((amplitude - min) / (max - min) * maxBarHeight));
-			}
-			this.context.fillStyle = this.context.strokeStyle = 'black';
-			
 		}
 	}
 
