@@ -131,7 +131,7 @@ $( () => {
 					let accum = 0;
 					let count = 0;
 					for (let j = 0 ; j < window - 1; ++j) {
-						accum += (data[j] / 256.0) * (data[j+lag] / 256.0);
+						accum += (data[j] / 128.0 - 1) * (data[j+lag] / 128.0 - 1);
 						++count;
 					}
 					acValues[lag - minLag] = [frequency, count ? accum / count : 0];
