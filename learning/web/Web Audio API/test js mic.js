@@ -4,6 +4,8 @@ debug.log('starting');
 
 import {Instrument} from './modules/instrument.mjs';
 
+import {NoteTracker} from './modules/noteTracker.mjs';
+
 $( () => {
 	debug.setLogContainer($('#log'));
 	debug.log('Document ready');
@@ -20,7 +22,7 @@ $( () => {
 			const micStream = audioContext.createMediaStreamSource(userMediaStream);
 			const analyser = audioContext.createAnalyser();
 			analyser.fftSize = 8192;
-			analyser.smoothingTimeConstant = 0.9;
+			analyser.smoothingTimeConstant = 0.3;
 
 			// build the graph
 			micStream.connect(analyser);
@@ -73,6 +75,8 @@ $( () => {
 		constructor () {
 			this.canvas = $('#view')[0];
 			this.context = this.canvas.getContext('2d');
+			this.noteTracker = new NoteTracker(20, 10);
+			debug.watch.noteTracker = this.noteTracker;
 		}
 
 		get width() { return this.canvas.width; }
@@ -117,7 +121,7 @@ $( () => {
 			// Auto-correlation-based test
 			const tdData = audioData.timeDomainData;
 
-			const minLag = Math.floor(audioData.sampleRate / instrument.keys.last.frequency);
+			const minLag = Math.floor(audioData.sampleRate / instrument.keys.last.frequency * 3 / 2);
 			const maxLag = Math.ceil(audioData.sampleRate / (instrument.keys.first.frequency * 2 / 3));
 			const windowSeconds = 0.1;
 
@@ -125,6 +129,9 @@ $( () => {
 				const acValues = new Array(maxLag - minLag + 1);
 
 				const window = Math.min(windowSeconds * audioData.sampleRate, data.length);
+
+				let maxValue = 0;
+				let frequencyAtMaxValue;
 
 				for (let lag = minLag ; lag <= maxLag ; ++lag) {
 					const frequency = audioData.sampleRate / lag;
@@ -134,14 +141,26 @@ $( () => {
 						accum += (data[j] / 128.0 - 1) * (data[j+lag] / 128.0 - 1);
 						++count;
 					}
-					acValues[lag - minLag] = [frequency, count ? accum / count : 0];
+					const value = accum / count;
+					acValues[lag - minLag] = [frequency, count ? value : 0];
+					if (value > maxValue) {
+						maxValue = value;
+						frequencyAtMaxValue = frequency;
+					}
 				}
-				
+
+				acValues.fundamental = frequencyAtMaxValue;
 				return acValues;
 			};
 
-			let acValues = autocorrelate(tdData, minLag, maxLag, windowSeconds);
-			//acValues = autocorrelate(acValues, minLag, maxLag, windowSeconds);
+			let fft = audioData.fftData;
+			const analysis = analyse(fft);
+			if (analysis.meanAmplitude < 0.1) {
+				this.noteTracker.clear();
+				return;
+			}
+
+			const acValues = autocorrelate(tdData, minLag, maxLag, windowSeconds);
 			
 			let min = 1;
 			let max = 0;
@@ -159,12 +178,23 @@ $( () => {
 																barWidth,
 																-((amplitude - min) / (max - min) * maxBarHeight));
 			}
+
+			if (acValues.fundamental) {
+				// display the fundamental frequency and closest note name
+				// at the top of the chart
+				const fundamentalXPos = frequencyToX(acValues.fundamental);
+				this.context.fillText(acValues.fundamental.toFixed(0) + ' Hz', fundamentalXPos, 40);
+				const key = instrument.keyFromFrequency(acValues.fundamental);
+				if (key)
+					this.context.fillText(key.note, fundamentalXPos, 30);
+				this.noteTracker.log(key && key.note);
+			}
+			else
+				this.noteTracker.log(null);
+
 			this.context.fillStyle = this.context.strokeStyle = 'black';
 			
-			// FFT-based test
-
 			// draw the frequency spectrum bar chart
-			let fft = audioData.fftData;
 
 			for (let i = 0 ; i < barCount ; ++i) {
 				this.context.fillRect(frequencyToX(i * audioData.binBandwith),
@@ -172,8 +202,6 @@ $( () => {
 				                      barWidth,
 				                      -(fft[i] / 256.0 * maxBarHeight));
 			}
-
-			const analysis = analyse(fft);
 
 			const drawAmplitudeLine = (amplitude) => {
 				const y = this.height - bottomPadding - amplitude / 256.0 * maxBarHeight;
@@ -255,6 +283,16 @@ $( () => {
 			}
 			this.context.fillStyle = this.context.strokeStyle = 'black';
 
+			// display the current identified note
+			if (this.noteTracker.current) {
+				this.context.fillStyle = this.context.strokeStyle = 'purple';
+				const previousFont = this.context.font;
+				this.context.font = '60px sans-serif';
+				this.context.fillText(this.noteTracker.current, 60, 60);
+				this.context.font = previousFont;
+				this.context.fillStyle = this.context.strokeStyle = 'black';
+			}
+
 		}
 	}
 
@@ -284,7 +322,7 @@ $( () => {
 					event.target.disabled = true;
 					onStart(stream);
 				})
-				.catch(debug.error);
+				.catch((error) => debug.error);
 		}
 		else
 			debug.log('navigator.mediaDevices is undefined');
