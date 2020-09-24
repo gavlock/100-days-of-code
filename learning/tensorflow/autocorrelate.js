@@ -9,6 +9,8 @@ class Chart {
 		const width = this._svg.clientWidth;
 		const height = this._svg.clientHeight;
 
+		this._d3.attr('viewBox', [0, 0, width, height]);
+
 		const margin = {top: 0,
 										left: 0,
 										bottom: 20,
@@ -35,20 +37,49 @@ class Chart {
 			.x( (d, i) => this._x(i))
 			.y( (d) => this._y(d));
 
-		this._d3
-			.attr('viewBox', [0, 0, width, height])
-			.append('path')
-			.attr('class', 'data')
-			.attr("stroke", "steelblue");
+		this._allSeries = [];
+		this._maxSeriesLength = 0;
+
+		this._seriesGroup = this._d3.append('g')
+			.attr('class', 'seriesGroup');
 	}
 
-	plot(data) {
-		const x = this._x;
-		x.domain( [0, data.length] );
+	redrawAllSeries() {
+		this._x.domain( [0, this._maxSeriesLength] );
 
-		this._d3.select('path.data')
-			.datum(data)
-			.attr('d', this._line);
+		for (let series of this._allSeries)
+			series.path.attr('d', this._line);
+	}
+
+	plot(name, data, color) {
+		if (data.length > this._maxSeriesLength) {
+			this._maxSeriesLength = data.length;
+			this.redrawAllSeries();
+		}
+
+		const path = this._seriesGroup
+					.append('path')
+					.attr('class', 'series')
+					.attr("stroke", color)
+					.datum(data)
+					.attr('d', this._line);
+
+		const series = {
+			name: name,
+			data: data,
+			color: color,
+			path: path,
+			update: (data) => {
+				if (data.length > this._maxSeriesLength) {
+					this._maxSeriesLength = data.length;
+					this.redrawAllSeries();
+				}
+				path.datum(data).attr('d', this._line);
+			}
+		};
+
+		this._allSeries.push(series);
+		return series;
 	}
 }
 
@@ -68,16 +99,16 @@ $( () => {
 
 	const signalChart = new Chart('#signal');
 	dbg.signalChart = signalChart;
-	signalChart.plot(signal);
+	const signalSeries = signalChart.plot('Signal', signal, 'steelblue');
 
 	tf.tidy('test', () => {
 		const tSignal = tf.tensor1d(signal);
 		const tLagged = tSignal.slice(30).pad([[0, 30]]);
-		tSignal.print(true);
-		tLagged.print(true);
+
 		const tProducts = tSignal.mul(tLagged);
-		tSignal.data().then( (data) => { signalChart.plot(data); } );
-		tProducts.print();
+
+		tLagged.data().then( (data) => { signalChart.plot('Shifted signal', data, 'burlyWood'); } );
+		tProducts.data().then( (data) => { signalChart.plot('Products', data, 'crimson'); } );
 	});
 
 });
