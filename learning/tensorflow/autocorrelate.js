@@ -11,10 +11,10 @@ class Chart {
 
 		this._d3.attr('viewBox', [0, 0, width, height]);
 
-		const margin = {top: 0,
-										left: 0,
-										bottom: 20,
-										right: 0};
+		const margin = this._margin = {top: 20,
+																	 left: 0,
+																	 bottom: 20,
+																	 right: 0};
 
 		this._x = d3.scaleLinear()
 			.range([margin.left, width - margin.right]);
@@ -31,11 +31,24 @@ class Chart {
 		this._d3.append('g')
 			.attr('class', 'y-axis axis')
 			.attr('transform', `translate(${margin.left}, 0)`)
-			.call( d3.axisLeft().scale(this._y).ticks(1).tickSize(-width) );
+			.call( d3.axisLeft().scale(this._y).ticks(1) );
+
+		const innerTicks = this._d3.append('g')
+					.attr('class', 'innerTicks');
+
+		innerTicks.append('line')
+			.attr('x1', margin.left)
+			.attr('y1', this._y(0))
+			.attr('x2', width - margin.right)
+			.attr('y2', this._y(0));
 
 		this._line = d3.line()
 			.x( (d, i) => this._x(i))
 			.y( (d) => this._y(d));
+
+		this._labelsGroup = this._d3.append('g')
+			.attr('class', 'labels')
+			.attr('text-anchor', 'middle');
 
 		this._allSeries = [];
 		this._maxSeriesLength = 0;
@@ -49,6 +62,24 @@ class Chart {
 
 		for (let series of this._allSeries)
 			series.path.attr('d', this._line);
+	}
+
+	updateLabels() {
+		const width = this._svg.clientWidth;
+		const labelCount = this._allSeries.length;
+		const xStep = width / (labelCount + 1);
+
+		const update = this._labelsGroup.selectAll('text').data(this._allSeries);
+
+		update.enter()
+			.append('text')
+			.merge(update)
+			.attr('x', (d, i) => (i + 1) * xStep)
+			.attr('y', this._margin.top)
+			.attr('fill', d => d.color)
+			.text( d => d.name );
+
+		update.exit().remove();
 	}
 
 	plot(name, data, color) {
@@ -79,6 +110,7 @@ class Chart {
 		};
 
 		this._allSeries.push(series);
+		this.updateLabels();
 		return series;
 	}
 }

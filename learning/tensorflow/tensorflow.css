@@ -11,3 +11,8 @@ svg.chart path {
     fill: none;
     stroke-width: 1px;
 }
+
+svg.chart .innerTicks {
+    stroke: grey;
+    stroke-width: 1px;
+}
