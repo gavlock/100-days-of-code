@@ -1,0 +1,13 @@
+svg.chart {
+    width: 100%;
+    height: 300px;
+
+    border: thin solid grey;
+
+    padding: 1em;
+}
+
+svg.chart path {
+    fill: none;
+    stroke-width: 1px;
+}
