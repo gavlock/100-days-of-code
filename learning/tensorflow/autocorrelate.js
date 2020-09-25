@@ -141,13 +141,13 @@ $( () => {
 	tf.tidy('autoconvolution', () => {
 		const maxLag = Math.floor(signal.length / 2);
 		const tSignal = tf.tensor1d(signal);
-		const tLagged = tSignal.slice(maxLag);
+		const tLagged = tSignal.slice(0, signal.length - maxLag);
 
 		const tData = tSignal.reshape([1, signal.length, 1]);
 		const tKernel = tLagged.reshape([signal.length - maxLag, 1, 1]);
 
 		const tConvolution = tData.conv1d(tKernel, 1, 'valid').squeeze();
-		const tCorrelation = tConvolution.reverse().div(tConvolution.max());
+		const tCorrelation = tConvolution.div(tConvolution.abs().max());
 		tCorrelation.data().then( (data) => { signalChart.plot('Autocorrelation', data, 'crimson'); } );
 	});
 
