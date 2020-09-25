@@ -129,18 +129,26 @@ $( () => {
 	for (let t = 0 ; t < signal.length ; ++t)
 		signal[t] += 0.2 * Math.sin(t / 15);
 
+	// add noise
+	const noiseScale = 0.25;
+	for (let t = 0 ; t < signal.length ; ++t)
+		signal[t] += noiseScale * ((2 * Math.random()) - 1);
+
 	const signalChart = new Chart('#signal');
 	dbg.signalChart = signalChart;
-	const signalSeries = signalChart.plot('Signal', signal, 'steelblue');
+	const signalSeries = signalChart.plot('Noisy signal', signal, 'steelblue');
 
-	tf.tidy('test', () => {
+	tf.tidy('autoconvolution', () => {
+		const maxLag = Math.floor(signal.length / 2);
 		const tSignal = tf.tensor1d(signal);
-		const tLagged = tSignal.slice(30).pad([[0, 30]]);
+		const tLagged = tSignal.slice(maxLag);
 
-		const tProducts = tSignal.mul(tLagged);
+		const tData = tSignal.reshape([1, signal.length, 1]);
+		const tKernel = tLagged.reshape([signal.length - maxLag, 1, 1]);
 
-		tLagged.data().then( (data) => { signalChart.plot('Shifted signal', data, 'burlyWood'); } );
-		tProducts.data().then( (data) => { signalChart.plot('Products', data, 'crimson'); } );
+		const tConvolution = tData.conv1d(tKernel, 1, 'valid').squeeze();
+		const tCorrelation = tConvolution.reverse().div(tConvolution.max());
+		tCorrelation.data().then( (data) => { signalChart.plot('Autocorrelation', data, 'crimson'); } );
 	});
 
 });
