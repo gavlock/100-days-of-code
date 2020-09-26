@@ -13,32 +13,42 @@ $( () => {
 																						 ['noise', 0.25]]);
 
 	dbg.audioGenerator = audioGenerator;
-	let signal = new Array(2048);
-	signal.fill(0);
 
 	const signalChart = new Chart('#signal');
-	const signalSeries = signalChart.plot('Signal', signal, 'steelblue');
+	const signalSeries = signalChart.plot('Signal', [], 'steelblue');
+	const correlationSeries = signalChart.plot('Correlation', [], 'crimson');
+
+	function frequencyToLag(frequency, sampleRate) { return sampleRate / frequency; }
+	const minFrequency = 65.4064; // C2
+	const maxFrequency = 1046.50; // C6
+
+	function pow2Ceil(x) {
+		return Math.pow(2, Math.ceil(Math.log(x) / Math.log(2)));
+	}
+	const minLag = pow2Ceil(frequencyToLag(maxFrequency, audioGenerator.sampleRate));
+	const maxLag = pow2Ceil(frequencyToLag(minFrequency, audioGenerator.sampleRate));
+
+	console.log('minLag = ' + minLag + ', maxLag = ' + maxLag);
+
+	const signalLength = maxLag * 2;
+	const signalVar = tf.variable(tf.zeros([signalLength]), false, 'signal');
 
 	$('#step').on('click', () => {
 		const newWindow = audioGenerator.getNextWindow();
-		signal = signal.slice(newWindow.length).concat(newWindow);
-		dbg.signal = signal;
-		signalSeries.update(signal);
+
+		tf.tidy('autoconvolution', () => {
+			signalVar.assign(signalVar.slice(newWindow.length).concat(tf.tensor1d(newWindow)));
+			const tLagged = signalVar.slice(0, signalLength - maxLag);
+
+			const tData = signalVar.reshape([1, signalLength, 1]);
+			const tKernel = tLagged.reshape([signalLength - maxLag, 1, 1]);
+
+			const tConvolution = tData.conv1d(tKernel, 1, 'valid').squeeze();
+			const tCorrelation = tConvolution.div(tConvolution.abs().max());
+
+			tCorrelation.data().then( correlationSeries.update );
+			signalVar.data().then( signalSeries.update );
+		});
 	});
-
-	/*
-	tf.tidy('autoconvolution', () => {
-		const maxLag = Math.floor(signal.length / 2);
-		const tSignal = tf.tensor1d(signal);
-		const tLagged = tSignal.slice(0, signal.length - maxLag);
-
-		const tData = tSignal.reshape([1, signal.length, 1]);
-		const tKernel = tLagged.reshape([signal.length - maxLag, 1, 1]);
-
-		const tConvolution = tData.conv1d(tKernel, 1, 'valid').squeeze();
-		const tCorrelation = tConvolution.div(tConvolution.abs().max());
-		tCorrelation.data().then( (data) => { signalChart.plot('Autocorrelation', data, 'crimson'); } );
-	});
-	*/
 
 });
