@@ -1,30 +1,32 @@
 import Chart from './d3chart.mjs';
+import AudioGenerator from './audio-generator.mjs';
 
 const dbg = window.dbg = {};
 
 $( () => {
+	const A4 = 440;
+	const C5 = 523.251;
+	const harmonicStructure = [1.0, 0.5, 0.3, 0.2];
+	const audioGenerator = new AudioGenerator(48000, 512,
+																						[['tone', A4, 1.0, harmonicStructure],
+																						 //['tone', C5, 1.0, harmonicStructure],
+																						 ['noise', 0.25]]);
 
-	const signal = new Array(2048);
+	dbg.audioGenerator = audioGenerator;
+	let signal = new Array(2048);
 	signal.fill(0);
 
-	for (let t = 0 ; t < signal.length ; ++t)
-		signal[t] += 0.5 * Math.sin(t / 60);
-
-	for (let t = 0 ; t < signal.length ; ++t)
-		signal[t] += 0.3 * Math.sin(t / 30);
-
-	for (let t = 0 ; t < signal.length ; ++t)
-		signal[t] += 0.2 * Math.sin(t / 15);
-
-	// add noise
-	const noiseScale = 0.25;
-	for (let t = 0 ; t < signal.length ; ++t)
-		signal[t] += noiseScale * ((2 * Math.random()) - 1);
-
 	const signalChart = new Chart('#signal');
-	dbg.signalChart = signalChart;
-	const signalSeries = signalChart.plot('Noisy signal', signal, 'steelblue');
+	const signalSeries = signalChart.plot('Signal', signal, 'steelblue');
 
+	$('#step').on('click', () => {
+		const newWindow = audioGenerator.getNextWindow();
+		signal = signal.slice(newWindow.length).concat(newWindow);
+		dbg.signal = signal;
+		signalSeries.update(signal);
+	});
+
+	/*
 	tf.tidy('autoconvolution', () => {
 		const maxLag = Math.floor(signal.length / 2);
 		const tSignal = tf.tensor1d(signal);
@@ -37,5 +39,6 @@ $( () => {
 		const tCorrelation = tConvolution.div(tConvolution.abs().max());
 		tCorrelation.data().then( (data) => { signalChart.plot('Autocorrelation', data, 'crimson'); } );
 	});
+	*/
 
 });
