@@ -1,0 +1,27 @@
+<html>
+  <head>
+    <title>Autocorrelate - TensorFlowM</title>
+
+    <link rel="stylesheet" type="text/css" href="tensorflow.css"/>
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/c3/c3.css"/>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3@5"></script>
+    <!--
+    <script src="https://cdn.jsdelivr.net/npm/c3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    -->
+
+    <script type="module" src="autocorrelate.js"></script>
+
+  </head>
+
+  <body>
+
+    <svg id="signal" class="chart"></svg>
+    <svg id="correlation" class="chart"></svg>
+    <button id="step">Step</button>
+
+  </body>
+</html>
