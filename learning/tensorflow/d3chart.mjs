@@ -55,8 +55,12 @@ export default class D3Chart {
 			.attr('class', 'seriesGroup');
 	}
 
-	redrawAllSeries() {
+	resize() {
 		this._x.domain( [0, this._maxSeriesLength] );
+	}
+
+	redrawAllSeries() {
+		this.resize();
 
 		for (let series of this._allSeries)
 			series.path.attr('d', this._line);
