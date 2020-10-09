@@ -1,4 +1,5 @@
 import csv
+import math
 import os
 import scipy.io.wavfile
 
@@ -23,24 +24,43 @@ def list_samples(directory):
                        'txt_file': txt_filename}
 
 
+def time_to_index(sample_rate, seconds, round_function=round):
+    return round_function(sample_rate * seconds)
+
+
+def midi_pitch_to_note_index(midi_pitch):
+    # The note C0 has a MIDI pitch number of 12
+    # Within my music library, C0 has a "note index" of 1
+    # Both systems count in semitones,
+    #   so there is a simple difference of 11 between them.
+    return midi_pitch - 11
+
+
+def conform_note(note, sample_rate):
+    onset = time_to_index(sample_rate, float(note['OnsetTime']), math.ceil)
+    offset = time_to_index(sample_rate, float(note['OffsetTime']), math.floor)
+    note_index = midi_pitch_to_note_index(int(note['MidiPitch']))
+    return {'onset': onset,
+            'offset': offset,
+            'note_index': note_index}
+
+
 def read_sample_audio(wav_filename):
     return scipy.io.wavfile.read(wav_filename)
 
 
-def read_sample_notes(txt_filename):
+def read_sample_notes(txt_filename, sample_rate):
     with open(txt_filename) as file:
         reader = csv.DictReader(file, dialect='excel-tab')
-        return [{'onset': note['OnsetTime'],
-                 'offset': note['OffsetTime'],
-                 'midi_pitch': note['MidiPitch']} for note in reader]
+        return [conform_note(note, sample_rate) for note in reader]
 
 
 def read_sample(sample):
     sample_rate, audio = read_sample_audio(sample['wav_file'])
-    notes = read_sample_notes(sample['txt_file'])
+    notes = read_sample_notes(sample['txt_file'], sample_rate)
     return {'sample': sample['sample'],
             'sample_rate': sample_rate,
-            'audio': audio,
+            'audio': audio.transpose() / 2**15,
             'notes': notes}
 
 
@@ -54,3 +74,12 @@ def read_samples(root_directory):
                    'sample_rate': read['sample_rate'],
                    'audio': read['audio'],
                    'notes': read['notes']}
+
+
+def get_onset_clip(sample, channel, window_size):
+    assert len(sample['notes']) == 1
+    note = sample['notes'][0]
+    onset_index = note['onset']
+
+    window = sample['audio'][channel][onset_index:onset_index + window_size]
+    return {'note': note['note_index'], 'window': window}
