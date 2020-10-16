@@ -48,12 +48,26 @@ class Note:
     def add_sample(self, sample):
         self.samples.append(sample)
 
+    def has_samples(self):
+        return len(self.samples) > 0
+
+    def random_sample(self):
+        return self.samples[random.randrange(0, len(self.samples))]
+
 
 class Silence:
     """Silence is a note-like standin for sounds that contain
 no discernable note"""
 
-    pass
+    def __init__(self):
+        self.index = 0
+        self.sample = SilenceSample()
+
+    def has_samples(self):
+        return True
+
+    def random_sample(self):
+        return self.sample
 
 
 class NoteSample:
@@ -87,6 +101,25 @@ class NoteSample:
         return self.get_waveform()[start:(start + window_size)]
 
 
+class SilenceSample:
+    """SilenceSample is a source of "silent" clips.
+
+    For now, silent clips are truly silent.
+    Later on, they could incorporate noise.
+    """
+
+    def __init__(self):
+        self.waveform = tf.zeros([0, 1])
+
+    def get_onset_clip(self, window_size):
+        if self.waveform.shape[0] != window_size:
+            self.waveform = tf.zeros([window_size, 1])
+        return self.waveform
+
+    def get_random_clip(self, window_size):
+        return self.get_onset_clip(window_size)
+
+
 class FileBasedNoteSample(NoteSample):
     """A NoteSample which lazily-loads, and caches, waveform data.
 
@@ -117,7 +150,8 @@ class FileBasedNoteSample(NoteSample):
 
         if self.waveform is None:
             file_contents = tf.io.read_file(self.filename)
-            self.waveform, sample_rate = tf.audio.decode_wav(file_contents, 1)
+            channel, sample_rate = tf.audio.decode_wav(file_contents, 1)
+            self.waveform = channel
             self.sample_rate = sample_rate.numpy()
 
         return self.waveform
