@@ -2,6 +2,7 @@
 the note detection model.
 """
 
+import math
 import random
 import tensorflow as tf
 
@@ -116,6 +117,9 @@ class SilenceSample:
             self.waveform = tf.zeros([window_size, 1])
         return self.waveform
 
+    def get_clip_at_t(self, time_after_onset, window_size):
+        return self.get_onset_clip(window_size)
+
     def get_random_clip(self, window_size):
         return self.get_onset_clip(window_size)
 
@@ -170,3 +174,16 @@ class FileBasedNoteSample(NoteSample):
             self.get_waveform()
 
         return self.sample_rate
+
+    def get_clip_at_t(self, time_after_onset, window_size):
+        """Returns a clip starting at a given time after the onset of the note.
+
+        The *onset* of a note is the time at which that note's key was struck.
+        `get_clip_at_t` returns a clip of the desired length starting at
+        `time_after_onset` seconds after the onset of the note.
+
+        Note: only works for samples that have a sample rate.
+        """
+        start = self.onset + math.ceil(time_after_onset * self.sample_rate)
+        assert self.offset > start + window_size
+        return self.get_waveform()[start:(start + window_size)]
